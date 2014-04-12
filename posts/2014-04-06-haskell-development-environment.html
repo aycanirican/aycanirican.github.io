@@ -33,11 +33,11 @@
 <li><p>First, you have to install GHC using homebrew tool (otherwise you probably can’t compile ghci-ng).</p></li>
 <li><p>One more thing you should pay attention is that Emacs doesn’t set PATH automatically. You may prefere to set them:</p></li>
 </ul>
-<pre><code>(let ((home (getenv &quot;HOME&quot;))
-      (my-path (concat &quot;~/.cabal/bin:/usr/local/bin:&quot; (getenv &quot;PATH&quot;))))
-   (setq eshell-path-env my-path)
-   (setq exec-path (append '(&quot;~/.cabal/bin&quot; &quot;/usr/local/bin&quot;) exec-path))
-   (setenv &quot;PATH&quot; my-path))</code></pre>
+<pre class="sourceCode commonlisp"><code class="sourceCode commonlisp">(<span class="kw">let</span> ((home (getenv <span class="st">&quot;HOME&quot;</span>))
+      (my-path (concat <span class="st">&quot;~/.cabal/bin:/usr/local/bin:&quot;</span> (getenv <span class="st">&quot;PATH&quot;</span>))))
+   (<span class="kw">setq</span> eshell-path-env my-path)
+   (<span class="kw">setq</span> exec-path (<span class="kw">append</span> '(<span class="st">&quot;~/.cabal/bin&quot;</span> <span class="st">&quot;/usr/local/bin&quot;</span>) exec-path))
+   (setenv <span class="st">&quot;PATH&quot;</span> my-path))</code></pre>
 
         </div>
         <div id="footer">

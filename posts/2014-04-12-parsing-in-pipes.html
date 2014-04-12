@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title>Aycan's Technical Diary - Parsing in Pipes</title>
+        <link rel="stylesheet" type="text/css" href="../css/default.css" />
+    </head>
+    <body>
+        <div id="header">
+            <div id="logo">
+                <a href="../">Technical Diary</a>
+            </div>
+            <div id="navigation">
+                <a href="../">Home</a>
+                <a href="../about.html">About</a>
+                <a href="../contact.html">Contact</a>
+                <a href="../archive.html">Archive</a>
+            </div>
+        </div>
+
+        <div id="content">
+            <h1>Parsing in Pipes</h1>
+
+            <div class="info">
+    Posted on April 12, 2014
+    
+</div>
+
+<p>We’re going to add a new security module for our product which is going to be a web application firewall testing tool. After made a briefing about it’s basic features, we take the lean way and planned to introduce a command-line program which reads requests from a file, does the IO job and outputs the results as Secure or Insecure.</p>
+<p>This lead me to a new opportunity to test Haskell Pipes Library. So I tried to make a prototype for a simple language to demnonstrate basic features of Pipes.</p>
+<p>Given any Text stream, it should parse Text and produce stream of Cmd types.</p>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="ot">{-# LANGUAGE OverloadedStrings        #-}</span>
+<span class="kw">module</span> <span class="dt">Main</span> <span class="kw">where</span>
+
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="kw">import           </span><span class="dt">Control.Applicative</span>
+<span class="kw">import           </span><span class="dt">Control.Monad</span>
+<span class="kw">import           </span><span class="dt">Data.Text.Lazy</span> <span class="kw">as</span> <span class="dt">TL</span>
+<span class="kw">import qualified</span> <span class="dt">Data.Text</span> <span class="kw">as</span> <span class="dt">T</span>
+<span class="kw">import           </span><span class="dt">Pipes</span>
+<span class="kw">import           </span><span class="dt">Pipes.Safe</span> <span class="kw">as</span> <span class="dt">PS</span>
+<span class="kw">import           </span><span class="dt">Pipes.Safe.Prelude</span>     <span class="kw">as</span> <span class="dt">PS</span>
+<span class="kw">import           </span><span class="dt">Pipes.Group</span>
+<span class="kw">import           </span><span class="dt">Pipes.Parse</span> <span class="kw">as</span> <span class="dt">PP</span>
+<span class="kw">import           </span><span class="dt">Pipes.Attoparsec</span> <span class="kw">as</span> <span class="dt">PA</span>
+<span class="kw">import qualified</span> <span class="dt">Data.Attoparsec.Text.Lazy</span> <span class="kw">as</span> <span class="dt">AL</span>
+<span class="kw">import qualified</span> <span class="dt">Pipes.Text</span> <span class="kw">as</span> <span class="dt">PT</span>
+<span class="kw">import qualified</span> <span class="dt">Pipes.Text.IO</span> <span class="kw">as</span> <span class="dt">PT</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+<span class="kw">import           </span><span class="dt">Data.Char</span>              (isSpace)
+<span class="kw">import qualified</span> <span class="dt">Pipes.Prelude</span>          <span class="kw">as</span> <span class="dt">P</span>
+<span class="kw">import           </span><span class="dt">Lens.Family</span>
+<span class="kw">import           </span><span class="dt">Lens.Family.State.Strict</span>
+<span class="fu">--------------------------------------------------------------------------------</span>
+
+<span class="ot">myFile ::</span> <span class="dt">TL.Text</span>
+myFile <span class="fu">=</span> TL.unlines [ <span class="st">&quot;Put 0x30 21&quot;</span>
+                    , <span class="st">&quot;Get 0x30&quot;</span>
+                    ]
+
+<span class="ot">myParser ::</span> <span class="dt">AL.Parser</span> <span class="dt">Cmd</span>
+myParser <span class="fu">=</span> <span class="kw">do</span>
+  cmd <span class="ot">&lt;-</span> AL.string <span class="st">&quot;Get&quot;</span> <span class="fu">&lt;|&gt;</span> AL.string <span class="st">&quot;Put&quot;</span>
+  <span class="kw">case</span> cmd <span class="kw">of</span>
+    <span class="st">&quot;Get&quot;</span> <span class="ot">-&gt;</span> <span class="dt">Get</span> <span class="fu">&lt;$&gt;</span> (AL.space <span class="fu">*&gt;</span> AL.takeTill AL.isEndOfLine <span class="fu">&lt;*</span> AL.endOfLine) 
+    <span class="st">&quot;Put&quot;</span> <span class="ot">-&gt;</span> <span class="dt">Put</span> <span class="fu">&lt;$&gt;</span> (AL.space <span class="fu">*&gt;</span> AL.takeTill isSpace)
+                 <span class="fu">&lt;*&gt;</span> (AL.space <span class="fu">*&gt;</span> AL.takeTill AL.isEndOfLine <span class="fu">&lt;*</span> AL.endOfLine)
+
+<span class="ot">testParser ::</span> <span class="dt">PT.Text</span> <span class="ot">-&gt;</span> <span class="dt">Either</span> <span class="dt">String</span> [<span class="dt">Cmd</span>]
+testParser <span class="fu">=</span> AL.parseOnly (many myParser)
+
+<span class="co">-- | Pipes Tests</span>
+<span class="kw">data</span> <span class="dt">Out</span> <span class="fu">=</span> <span class="dt">OutA</span>
+         <span class="fu">|</span> <span class="dt">OutB</span>
+           <span class="kw">deriving</span> (<span class="dt">Eq</span>, <span class="dt">Show</span>)
+
+<span class="kw">data</span> <span class="dt">Cmd</span> <span class="fu">=</span> <span class="dt">Get</span> <span class="dt">T.Text</span>
+         <span class="fu">|</span> <span class="dt">Put</span> <span class="dt">T.Text</span> <span class="dt">T.Text</span>
+         <span class="fu">|</span> <span class="dt">Err</span> <span class="dt">T.Text</span>      <span class="co">-- ^ emit errors with line nums</span>
+           <span class="kw">deriving</span> (<span class="dt">Eq</span>, <span class="dt">Show</span>)
+
+<span class="ot">cmdParsed ::</span> (<span class="dt">MonadSafe</span> m)
+          <span class="ot">=&gt;</span> <span class="dt">Producer</span> <span class="dt">PT.Text</span> m ()
+          <span class="ot">-&gt;</span> <span class="dt">Producer</span> <span class="dt">Cmd</span> m (<span class="dt">Either</span> (<span class="dt">ParsingError</span>, <span class="dt">Producer</span> <span class="dt">PT.Text</span> m ()) ())
+cmdParsed <span class="fu">=</span> PA.parsed myParser
+
+<span class="ot">test ::</span> (<span class="dt">MonadSafe</span> m) <span class="ot">=&gt;</span> m ()
+test <span class="fu">=</span> <span class="kw">do</span>
+  res <span class="ot">&lt;-</span> pipeline
+  <span class="kw">case</span> res <span class="kw">of</span>
+    <span class="dt">Right</span> x       <span class="ot">-&gt;</span> return ()
+    <span class="dt">Left</span> (err, p) <span class="ot">-&gt;</span> (liftIO <span class="fu">$</span> print (peMessage err))
+  <span class="kw">where</span>
+    input <span class="fu">=</span> PT.fromLazy myFile
+    pipeline <span class="fu">=</span> runEffect <span class="fu">$</span> cmdParsed input <span class="fu">&gt;-&gt;</span> P.print
+
+<span class="ot">main ::</span> <span class="dt">IO</span> ()
+main <span class="fu">=</span> runSafeT <span class="fu">$</span> test</code></pre>
+
+        </div>
+        <div id="footer">
+            Site proudly generated by
+            <a href="http://jaspervdj.be/hakyll">Hakyll</a>
+        </div>
+    </body>
+</html>
